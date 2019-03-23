@@ -1,7 +1,7 @@
-use libc;
-
 use crate::hwaddr::*;
-use std;
+use std::cell::RefCell;
+use std::fmt;
+use std::fmt::Write;
 
 type NfqueueData = *const libc::c_void;
 
@@ -11,6 +11,7 @@ pub struct Message {
     nfad: NfqueueData,
     id: u32,
     l3_proto: u16,
+    verdict: RefCell<Option<Verdict>>,
 }
 
 #[derive(Debug)]
@@ -42,12 +43,12 @@ const NF_QUEUE: u32 = 0x0003;
 const NF_REPEAT: u32 = 0x0004;
 const NF_STOP: u32 = 0x0005;
 
-fn u32_of_verdict(v: Verdict) -> u32 {
+fn u32_of_verdict(v: &Verdict) -> u32 {
     match v {
         Verdict::Drop => NF_DROP,
         Verdict::Accept => NF_ACCEPT,
         Verdict::Stolen => NF_STOLEN,
-        Verdict::Queue(queue) => NF_QUEUE | (u32::from(queue) << 16),
+        Verdict::Queue(queue) => NF_QUEUE | (u32::from(*queue) << 16),
         Verdict::Repeat => NF_REPEAT,
         Verdict::Stop => NF_STOP,
     }
@@ -144,6 +145,7 @@ impl Message {
             nfad,
             id,
             l3_proto,
+            verdict: RefCell::new(None),
         }
     }
 
@@ -247,9 +249,11 @@ impl Message {
     ///
     /// * `verdict`: verdict to return to netfilter (`Verdict::Accept`,
     ///   `Verdict::Drop`, ...)
-    pub fn set_verdict(&self, verdict: Verdict) {
+    pub fn set_verdict(self, verdict: Verdict) {
         assert!(!self.qqh.is_null());
-        let c_verdict = u32_of_verdict(verdict);
+        let c_verdict = u32_of_verdict(&verdict);
+        *self.verdict.borrow_mut() = Some(verdict);
+
         //unsafe { nfq_set_verdict(self.qqh, self.id, c_verdict, 0, std::ptr::null_mut()) };
         unsafe { nfq_set_verdict2(self.qqh, self.id, c_verdict, 0, 0, std::ptr::null_mut()) };
     }
@@ -267,9 +271,10 @@ impl Message {
     /// * `verdict`: verdict to return to netfilter (`Verdict::Accept`,
     ///   `Verdict::Drop`, ...)
     /// * `mark`: the mark to put on the packet, in network-byte order
-    pub fn set_verdict_mark(&self, verdict: Verdict, mark: u32) {
+    pub fn set_verdict_mark(self, verdict: Verdict, mark: u32) {
         assert!(!self.qqh.is_null());
-        let c_verdict = u32_of_verdict(verdict);
+        let c_verdict = u32_of_verdict(&verdict);
+        *self.verdict.borrow_mut() = Some(verdict);
         //unsafe { nfq_set_verdict(self.qqh, self.id, c_verdict, 0, std::ptr::null_mut()) };
         unsafe { nfq_set_verdict2(self.qqh, self.id, c_verdict, mark, 0, std::ptr::null_mut()) };
     }
@@ -289,11 +294,12 @@ impl Message {
     ///   `Verdict::Drop`, ...)
     /// * `mark`: the mark to put on the packet, in network-byte order
     /// * `data`: the new packet
-    pub fn set_verdict_full(&self, verdict: Verdict, mark: u32, data: &[u8]) {
+    pub fn set_verdict_full(self, verdict: Verdict, mark: u32, data: &[u8]) {
         assert!(!self.qqh.is_null());
-        let c_verdict = u32_of_verdict(verdict);
+        let c_verdict = u32_of_verdict(&verdict);
         let data_ptr = data.as_ptr() as *const libc::c_uchar;
         let data_len = data.len() as u32;
+        *self.verdict.borrow_mut() = Some(verdict);
         //unsafe { nfq_set_verdict(self.qqh, self.id, c_verdict, 0, std::ptr::null_mut()) };
         unsafe { nfq_set_verdict2(self.qqh, self.id, c_verdict, mark, data_len, data_ptr) };
     }
@@ -344,8 +350,14 @@ impl Message {
     }
 }
 
-use std::fmt;
-use std::fmt::Write;
+impl Drop for Message {
+    fn drop(&mut self) {
+        let verdict = self.verdict.borrow();
+        if verdict.is_none() {
+            panic!("No verdict set on Message!");
+        }
+    }
+}
 
 impl fmt::Display for Message {
     fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
