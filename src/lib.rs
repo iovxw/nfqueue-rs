@@ -112,7 +112,7 @@ const NFQNL_COPY_PACKET: u8 = 0x02;
 pub struct Queue<T> {
     qh: NfqueueHandle,
     qqh: NfqueueQueueHandle,
-    cb: Option<fn(&Message, &mut T) -> ()>,
+    cb: Option<fn(Message, &mut T) -> ()>,
     data: T,
 }
 
@@ -201,7 +201,7 @@ impl<T: Send> Queue<T> {
     ///
     /// * `num`: the number of the queue to bind to
     /// * `cb`: callback function to call for each queued packet
-    pub fn create_queue(&mut self, num: u16, cb: fn(&Message, &mut T)) {
+    pub fn create_queue(&mut self, num: u16, cb: fn(Message, &mut T)) {
         assert!(!self.qh.is_null());
         assert!(self.qqh.is_null());
         let self_ptr = &*self as *const Queue<T> as *mut libc::c_void;
@@ -302,7 +302,7 @@ extern "C" fn real_callback<T>(
     match q.cb {
         None => panic!("no callback registered"),
         Some(callback) => {
-            callback(&msg, &mut q.data);
+            callback(msg, &mut q.data);
         }
     }
 }

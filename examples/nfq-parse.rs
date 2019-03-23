@@ -156,7 +156,7 @@ fn handle_transport_protocol(
     }
 }
 
-fn queue_callback(msg: &nfqueue::Message, state: &mut State) {
+fn queue_callback(msg: nfqueue::Message, state: &mut State) {
     println!("\n---");
     println!("Packet received [id: 0x{:x}]\n", msg.get_id());
 
