@@ -281,6 +281,7 @@ impl<T: Send> Queue<T> {
 
             let rv = unsafe { nfq_handle_packet(self.qh, buf_ptr, rc as libc::c_int) };
             if rv < 0 {
+                #[cfg(debug_assertions)]
                 println!("error in nfq_handle_packet()");
             }; // not critical
         }
