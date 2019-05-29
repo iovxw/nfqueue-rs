@@ -51,6 +51,7 @@
 //! }
 //! ```
 
+use errno::errno;
 use libc;
 
 pub use crate::hwaddr::*;
@@ -275,14 +276,17 @@ impl<T: Send> Queue<T> {
 
         loop {
             let rc = unsafe { libc::recv(fd, buf_ptr, buf_len, 0) };
-            if rc < 0 {
-                panic!("error in recv()");
+            // 105 = No buffer space available, queue is full
+            if rc == -1 && errno().0 != 105 {
+                panic!("error in recv(): {}", errno());
             };
 
             let rv = unsafe { nfq_handle_packet(self.qh, buf_ptr, rc as libc::c_int) };
-            if rv < 0 {
-                #[cfg(debug_assertions)]
-                println!("error in nfq_handle_packet()");
+            // Ignore if the error caused by queue full
+            // 2 = No such file or directory
+            // 11 = Resource temporarily unavailable
+            if rv != 0 && errno().0 != 11 && errno().0 != 2 {
+                println!("error in nfq_handle_packet(): {}", errno::errno());
             }; // not critical
         }
     }
