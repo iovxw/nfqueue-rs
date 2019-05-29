@@ -53,6 +53,7 @@
 
 use errno::errno;
 use libc;
+use nix::sys::socket::{getsockopt, sockopt::RcvBuf};
 
 pub use crate::hwaddr::*;
 mod hwaddr;
@@ -270,7 +271,8 @@ impl<T: Send> Queue<T> {
         assert!(!self.cb.is_none());
 
         let fd = self.fd();
-        let mut buf: [u8; 65536] = [0; 65536];
+        let buf_size = getsockopt(fd, RcvBuf).unwrap();
+        let mut buf = vec![0u8; buf_size];
         let buf_ptr = buf.as_mut_ptr() as *mut libc::c_void;
         let buf_len = buf.len() as libc::size_t;
 
