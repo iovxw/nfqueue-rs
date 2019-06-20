@@ -320,6 +320,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn nfqueue_open() {
         let mut q = Queue::new(());
 
